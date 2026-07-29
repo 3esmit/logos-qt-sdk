@@ -5,7 +5,7 @@
     logos-nix.url = "github:logos-co/logos-nix";
     nixpkgs.follows = "logos-nix/nixpkgs";
     logos-protocol = {
-      url = "github:logos-co/logos-protocol";
+      url = "github:3esmit/logos-protocol";
       inputs.logos-nix.follows = "logos-nix";
     };
     # The canonical, language-neutral LIDL frontend the qt-generator links.
