@@ -16,7 +16,7 @@
     # Test-only: logos-cpp-generator is used to generate the provider
     # dispatch fixture exercised by test_provider_dispatch.
     logos-cpp-sdk = {
-      url = "github:logos-co/logos-cpp-sdk";
+      url = "github:3esmit/logos-cpp-sdk?rev=4726bd0e5d74dccdbfd966733b21590d553a3c68";
       inputs.logos-nix.follows = "logos-nix";
       inputs.logos-protocol.follows = "logos-protocol";
       inputs.logos-lidl.follows = "logos-lidl";
@@ -46,7 +46,9 @@
             logos-lidl = lidlPkg;
           };
           include = import ./nix/include.nix { inherit pkgs common src; };
-          tests = import ./nix/tests.nix { inherit pkgs common src protocolLib cppGenerator; };
+          tests = import ./nix/tests.nix {
+            inherit pkgs common src protocolLib cppGenerator qtGenerator;
+          };
 
           qtSdk = pkgs.symlinkJoin {
             name = "logos-qt-sdk";
@@ -69,7 +71,14 @@
         let
           common = import ./nix/default.nix { inherit pkgs; };
           src = ./.;
-          tests = import ./nix/tests.nix { inherit pkgs common src protocolLib cppGenerator; };
+          qtGenerator = import ./nix/qt-generator.nix {
+            inherit pkgs src;
+            cppGeneratorBin = cppGenerator;
+            logos-lidl = lidlPkg;
+          };
+          tests = import ./nix/tests.nix {
+            inherit pkgs common src protocolLib cppGenerator qtGenerator;
+          };
         in
         {
           inherit tests;
