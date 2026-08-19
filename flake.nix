@@ -5,7 +5,7 @@
     logos-nix.url = "github:logos-co/logos-nix";
     nixpkgs.follows = "logos-nix/nixpkgs";
     logos-protocol = {
-      url = "github:3esmit/logos-protocol";
+      url = "github:3esmit/logos-protocol?rev=dbd1df94caeb3e073c330fc3d95988ce1086b1a5";
       inputs.logos-nix.follows = "logos-nix";
     };
     # The canonical, language-neutral LIDL frontend the qt-generator links.
@@ -16,7 +16,7 @@
     # Test-only: logos-cpp-generator is used to generate the provider
     # dispatch fixture exercised by test_provider_dispatch.
     logos-cpp-sdk = {
-      url = "github:3esmit/logos-cpp-sdk?rev=4726bd0e5d74dccdbfd966733b21590d553a3c68";
+      url = "github:3esmit/logos-cpp-sdk?rev=790030b442f3fc210f973fb2b8807e3495ee9724";
       inputs.logos-nix.follows = "logos-nix";
       inputs.logos-protocol.follows = "logos-protocol";
       inputs.logos-lidl.follows = "logos-lidl";
@@ -27,14 +27,48 @@
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
+        inherit system;
         pkgs = import nixpkgs { inherit system; };
         protocolLib = logos-protocol.packages.${system}.logos-protocol-lib;
         cppGenerator = logos-cpp-sdk.packages.${system}.cpp-generator;
         lidlPkg = logos-lidl.packages.${system}.logos-lidl;
       });
+
+      # Same as forAllSystems, plus the "x86_64-windows" pseudo-system. This
+      # cannot just be logos-nix.lib.forAllTargets, because that only supplies
+      # { system, pkgs } and this flake also threads per-system dependencies
+      # through.
+      #
+      # Keying the Windows target as a SYSTEM is what keeps
+      # `dep.packages.${system}.foo` working untouched -- the dependency flakes
+      # expose the same pseudo-system.
+      windowsBuildSystem = "x86_64-linux";
+      forAllTargets = f:
+        nixpkgs.lib.genAttrs (systems ++ [ "x86_64-windows" ]) (system:
+          let
+            isWin = system == "x86_64-windows";
+          in
+          f {
+            inherit system;
+            pkgs =
+              if isWin then logos-nix.lib.mkWindowsPkgs { buildSystem = windowsBuildSystem; }
+              else import nixpkgs { inherit system; };
+
+            # Target-side library: follows the target.
+            protocolLib = logos-protocol.packages.${system}.logos-protocol-lib;
+            lidlPkg = logos-lidl.packages.${system}.logos-lidl;
+
+            # HOST TOOL: the code generator is executed during the build, so it
+            # must be a native binary for the machine doing the building. Taking
+            # it from packages.x86_64-windows would hand the Linux builder a PE
+            # it cannot run -- the same rule that puts repc/moc in
+            # QT_HOST_PATH rather than the target Qt.
+            cppGenerator =
+              logos-cpp-sdk.packages.${if isWin then windowsBuildSystem else system}.cpp-generator;
+          });
     in
     {
-      packages = forAllSystems ({ pkgs, protocolLib, cppGenerator, lidlPkg }:
+      packages = forAllTargets ({ pkgs, protocolLib, cppGenerator, lidlPkg, ... }:
         let
           common = import ./nix/default.nix { inherit pkgs; };
           src = ./.;
