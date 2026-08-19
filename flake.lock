@@ -18,17 +18,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1786212977,
-        "narHash": "sha256-hAR1ltNmQnL5QZF1nhWuEZVH9EikV0G2obYzWkMVx/I=",
+        "lastModified": 1787145901,
+        "narHash": "sha256-jlollFa4cvc70fPQqvwR8/YfCc2t4bwTDX3Yh7WLTvc=",
         "owner": "3esmit",
         "repo": "logos-cpp-sdk",
-        "rev": "4726bd0e5d74dccdbfd966733b21590d553a3c68",
+        "rev": "790030b442f3fc210f973fb2b8807e3495ee9724",
         "type": "github"
       },
       "original": {
         "owner": "3esmit",
         "repo": "logos-cpp-sdk",
-        "rev": "4726bd0e5d74dccdbfd966733b21590d553a3c68",
+        "rev": "790030b442f3fc210f973fb2b8807e3495ee9724",
         "type": "github"
       }
     },
@@ -44,11 +44,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785470541,
-        "narHash": "sha256-5fVAbSGMRhEfRXfhaoq26LZeJuziRT/NMFsfhtd0ogA=",
+        "lastModified": 1786415321,
+        "narHash": "sha256-Oe98SavQSVGBIY7WIc8RQ5l+Bl4KLsdmjb+PyscfdNw=",
         "owner": "logos-co",
         "repo": "logos-lidl",
-        "rev": "35f33d87b7d6c22d9d4658c58855ae887ce515f1",
+        "rev": "ffeebf2e90fa0c65e8c486988271fe0ca029d1e1",
         "type": "github"
       },
       "original": {
@@ -63,11 +63,11 @@
         "nixpkgs-windows": "nixpkgs-windows"
       },
       "locked": {
-        "lastModified": 1786729772,
-        "narHash": "sha256-7qE/hchFHmaCxoFCI4dtCqv2eHyL6VttgedTas41Lgs=",
+        "lastModified": 1786399295,
+        "narHash": "sha256-Bl1A0UgsIXioZw5uEW8Jl5u7FfZcFMnpYlpsdezFwK0=",
         "owner": "logos-co",
         "repo": "logos-nix",
-        "rev": "f55bf91b8a723ee5c27c39c773b034255538d280",
+        "rev": "6e0f4a7120fced10829b0b3a698ff619a11d4605",
         "type": "github"
       },
       "original": {
@@ -88,17 +88,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1786916798,
-        "narHash": "sha256-foIwEFFYZb8uiyzRghk22aXnGoWPFzM9Adl/hkJqRX4=",
+        "lastModified": 1787145838,
+        "narHash": "sha256-qXHNkjNrh/3hMk18fO1/kQGviGLXdvWoTgFwzcj3guY=",
         "owner": "3esmit",
         "repo": "logos-protocol",
-        "rev": "719a473fedbd7fbabcf9d5485f96abaddf29c622",
+        "rev": "dbd1df94caeb3e073c330fc3d95988ce1086b1a5",
         "type": "github"
       },
       "original": {
         "owner": "3esmit",
         "repo": "logos-protocol",
-        "rev": "719a473fedbd7fbabcf9d5485f96abaddf29c622",
+        "rev": "dbd1df94caeb3e073c330fc3d95988ce1086b1a5",
         "type": "github"
       }
     },

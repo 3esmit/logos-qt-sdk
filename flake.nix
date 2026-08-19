@@ -5,7 +5,7 @@
     logos-nix.url = "github:logos-co/logos-nix";
     nixpkgs.follows = "logos-nix/nixpkgs";
     logos-protocol = {
-      url = "github:3esmit/logos-protocol?rev=719a473fedbd7fbabcf9d5485f96abaddf29c622";
+      url = "github:3esmit/logos-protocol?rev=dbd1df94caeb3e073c330fc3d95988ce1086b1a5";
       inputs.logos-nix.follows = "logos-nix";
     };
     # The canonical, language-neutral LIDL frontend the qt-generator links.
@@ -16,7 +16,7 @@
     # Test-only: logos-cpp-generator is used to generate the provider
     # dispatch fixture exercised by test_provider_dispatch.
     logos-cpp-sdk = {
-      url = "github:3esmit/logos-cpp-sdk?rev=4726bd0e5d74dccdbfd966733b21590d553a3c68";
+      url = "github:3esmit/logos-cpp-sdk?rev=790030b442f3fc210f973fb2b8807e3495ee9724";
       inputs.logos-nix.follows = "logos-nix";
       inputs.logos-protocol.follows = "logos-protocol";
       inputs.logos-lidl.follows = "logos-lidl";
