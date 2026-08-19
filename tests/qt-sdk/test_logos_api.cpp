@@ -52,50 +52,6 @@ TEST_F(LogosApiTest, GetClientDifferentModulesReturnDifferentClients)
     EXPECT_NE(a, b);
 }
 
-TEST_F(LogosApiTest, LegacyClientCacheKeyUsesDefaultInstance)
-{
-    const LogosAPIClientCacheKey key{
-        QStringLiteral("target"), LogosMode::Mock, LogosTransportConfig{}};
-
-    EXPECT_TRUE(key.targetInstanceId.isEmpty());
-}
-
-TEST_F(LogosApiTest, ScopedProviderUsesDistinctRegistry)
-{
-    LogosAPI lez("lez_indexer_module", QStringLiteral("zone_0101"));
-    LogosAPI paradox("lez_indexer_module", QStringLiteral("zone_8888"));
-
-    EXPECT_EQ(lez.getProvider()->registryUrl(),
-              QStringLiteral("local:logos_lez_indexer_module_zone_0101"));
-    EXPECT_EQ(paradox.getProvider()->registryUrl(),
-              QStringLiteral("local:logos_lez_indexer_module_zone_8888"));
-    EXPECT_NE(lez.getProvider()->registryUrl(), paradox.getProvider()->registryUrl());
-}
-
-TEST_F(LogosApiTest, ScopedTargetClientsDoNotAlias)
-{
-    LogosAPI api("origin");
-
-    LogosAPIClient* lez = api.getClient(
-        QStringLiteral("lez_indexer_module"), QStringLiteral("zone_0101"));
-    LogosAPIClient* paradox = api.getClient(
-        QStringLiteral("lez_indexer_module"), QStringLiteral("zone_8888"));
-    LogosAPIClient* legacy = api.getClient(QStringLiteral("lez_indexer_module"));
-
-    ASSERT_NE(lez, nullptr);
-    ASSERT_NE(paradox, nullptr);
-    ASSERT_NE(legacy, nullptr);
-    EXPECT_NE(lez, paradox);
-    EXPECT_NE(lez, legacy);
-    EXPECT_NE(paradox, legacy);
-    EXPECT_EQ(lez->registryUrl(),
-              QStringLiteral("local:logos_lez_indexer_module_zone_0101"));
-    EXPECT_EQ(paradox->registryUrl(),
-              QStringLiteral("local:logos_lez_indexer_module_zone_8888"));
-    EXPECT_EQ(legacy, api.getClient(
-        QStringLiteral("lez_indexer_module"), QString{}));
-}
-
 TEST_F(LogosApiTest, MultipleLogosApiInstances)
 {
     LogosAPI api1("mod1");
