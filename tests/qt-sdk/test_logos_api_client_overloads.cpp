@@ -2,6 +2,7 @@
 #include <QCoreApplication>
 #include <QSignalSpy>
 #include "logos_mock.h"
+#include "event_test_helpers.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
 
@@ -87,7 +88,7 @@ TEST_F(LogosApiClientOverloadsTest, AsyncZeroArgs)
         [&](QVariant v) { called = true; received = v; });
 
     // Process event loop so QTimer::singleShot fires
-    QCoreApplication::processEvents();
+    drainEvents();
 
     EXPECT_TRUE(called);
     EXPECT_EQ(received.toInt(), 42);
@@ -98,7 +99,7 @@ TEST_F(LogosApiClientOverloadsTest, AsyncOneArg)
     bool called = false;
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariant("a"),
         [&](QVariant) { called = true; });
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(called);
 }
 
@@ -107,7 +108,7 @@ TEST_F(LogosApiClientOverloadsTest, AsyncTwoArgs)
     bool called = false;
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariant(1), QVariant(2),
         [&](QVariant) { called = true; });
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(called);
 }
 
@@ -116,7 +117,7 @@ TEST_F(LogosApiClientOverloadsTest, AsyncThreeArgs)
     bool called = false;
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariant(1), QVariant(2), QVariant(3),
         [&](QVariant) { called = true; });
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(called);
 }
 
@@ -125,7 +126,7 @@ TEST_F(LogosApiClientOverloadsTest, AsyncFourArgs)
     bool called = false;
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariant(1), QVariant(2), QVariant(3), QVariant(4),
         [&](QVariant) { called = true; });
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(called);
 }
 
@@ -134,7 +135,7 @@ TEST_F(LogosApiClientOverloadsTest, AsyncFiveArgs)
     bool called = false;
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariant(1), QVariant(2), QVariant(3), QVariant(4), QVariant(5),
         [&](QVariant) { called = true; });
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(called);
 }
 
@@ -145,7 +146,7 @@ TEST_F(LogosApiClientOverloadsTest, AsyncNullCallbackIgnored)
     // fill), so pin the result-callback overload explicitly.
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariantList(),
                                       static_cast<LogosAPIClient::AsyncResultCallback>(nullptr));
-    QCoreApplication::processEvents();
+    drainEvents();
 }
 
 TEST_F(LogosApiClientOverloadsTest, GetTokenDelegatesToTokenManager)

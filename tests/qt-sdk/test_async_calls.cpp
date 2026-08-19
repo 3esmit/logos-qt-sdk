@@ -3,6 +3,7 @@
 #include <QCoreApplication>
 #include "logos_mock.h"
 #include "mock_store.h"
+#include "event_test_helpers.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
 
@@ -40,7 +41,7 @@ TEST_F(AsyncCallsTest, BasicAsyncCallReturnsCorrectResult)
         [&](QVariant v) { called = true; received = v; });
 
     EXPECT_FALSE(called); // callback must not fire synchronously
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(called);
     EXPECT_EQ(received.toInt(), 42);
 }
@@ -54,7 +55,7 @@ TEST_F(AsyncCallsTest, AsyncCallWithStringResult)
     m_client->invokeRemoteMethodAsync("mod", "getName", QVariantList(),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toString(), "hello");
 }
 
@@ -67,7 +68,7 @@ TEST_F(AsyncCallsTest, AsyncCallWithBoolResult)
     m_client->invokeRemoteMethodAsync("mod", "isReady", QVariantList(),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(received.toBool());
 }
 
@@ -80,7 +81,7 @@ TEST_F(AsyncCallsTest, AsyncCallWithDoubleResult)
     m_client->invokeRemoteMethodAsync("mod", "getPrice", QVariantList(),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_DOUBLE_EQ(received.toDouble(), 3.14);
 }
 
@@ -94,7 +95,7 @@ TEST_F(AsyncCallsTest, AsyncCallWithVariantListResult)
     m_client->invokeRemoteMethodAsync("mod", "getItems", QVariantList(),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toList().size(), 3);
 }
 
@@ -129,7 +130,7 @@ TEST_F(AsyncCallsTest, AsyncUserCallbackRunsBeforeMockLogosObjectRelease)
             EXPECT_EQ(v.toList().at(0).toString(), QStringLiteral("pkg_a"));
         });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(userCallbackRan);
     EXPECT_EQ(releaseCount.load(), 0)
         << "consumer must cache the replica across calls, not release it per call";
@@ -138,7 +139,7 @@ TEST_F(AsyncCallsTest, AsyncUserCallbackRunsBeforeMockLogosObjectRelease)
     // cached replica exactly once via clearObjectCache().
     delete m_api;
     m_api = nullptr; // prevent double-delete in TearDown()
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(releaseCount.load(), 1)
         << "cached replica must be released once on consumer teardown";
 
@@ -159,7 +160,7 @@ TEST_F(AsyncCallsTest, AsyncCallWithVariantMapResult)
     m_client->invokeRemoteMethodAsync("mod", "getData", QVariantList(),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     QVariantMap result = received.toMap();
     EXPECT_EQ(result["key"].toString(), "value");
     EXPECT_EQ(result["count"].toInt(), 5);
@@ -175,7 +176,7 @@ TEST_F(AsyncCallsTest, AsyncCallForwardsArguments)
         QVariantList() << 10 << 20,
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toInt(), 30);
     EXPECT_TRUE(m_mock->wasCalledWith("mod", "add", QVariantList() << 10 << 20));
 }
@@ -192,7 +193,7 @@ TEST_F(AsyncCallsTest, AsyncCallTracksCallCount)
     m_client->invokeRemoteMethodAsync("mod", "ping", QVariantList(), cb);
     m_client->invokeRemoteMethodAsync("mod", "ping", QVariantList(), cb);
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(callCount, 3);
     EXPECT_EQ(m_mock->callCount("mod", "ping"), 3);
 }
@@ -206,7 +207,7 @@ TEST_F(AsyncCallsTest, AsyncNullCallbackDoesNotCrash)
     // AsyncResultErrorCallback overloads; pin the result-callback one.
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariantList(),
                                       static_cast<LogosAPIClient::AsyncResultCallback>(nullptr));
-    QCoreApplication::processEvents();
+    drainEvents();
     // no crash = pass
 }
 
@@ -246,7 +247,7 @@ TEST_F(AsyncCallsTest, MultipleConcurrentAsyncCalls)
     m_client->invokeRemoteMethodAsync("mod", "b", QVariantList(), [&](QVariant v) { rb = v; });
     m_client->invokeRemoteMethodAsync("mod", "c", QVariantList(), [&](QVariant v) { rc = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(ra.toInt(), 1);
     EXPECT_EQ(rb.toInt(), 2);
     EXPECT_EQ(rc.toInt(), 3);
@@ -268,7 +269,7 @@ TEST_F(AsyncCallsTest, AsyncCallbackIsNeverSynchronous)
     calledDuringInvoke = calledAfterProcessEvents;
     EXPECT_FALSE(calledDuringInvoke); // must not fire synchronously
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_TRUE(calledAfterProcessEvents);
 }
 
@@ -281,7 +282,7 @@ TEST_F(AsyncCallsTest, AsyncOneArgOverload)
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariant("arg1"),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toInt(), 10);
     QVariantList last = m_mock->lastArgs("mod", "fn");
     ASSERT_EQ(last.size(), 1);
@@ -297,7 +298,7 @@ TEST_F(AsyncCallsTest, AsyncTwoArgOverload)
     m_client->invokeRemoteMethodAsync("mod", "fn", QVariant(1), QVariant(2),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toInt(), 20);
     QVariantList last = m_mock->lastArgs("mod", "fn");
     ASSERT_EQ(last.size(), 2);
@@ -313,7 +314,7 @@ TEST_F(AsyncCallsTest, AsyncThreeArgOverload)
         QVariant(1), QVariant(2), QVariant(3),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toInt(), 30);
     QVariantList last = m_mock->lastArgs("mod", "fn");
     ASSERT_EQ(last.size(), 3);
@@ -329,7 +330,7 @@ TEST_F(AsyncCallsTest, AsyncFourArgOverload)
         QVariant(1), QVariant(2), QVariant(3), QVariant(4),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toInt(), 40);
     QVariantList last = m_mock->lastArgs("mod", "fn");
     ASSERT_EQ(last.size(), 4);
@@ -345,7 +346,7 @@ TEST_F(AsyncCallsTest, AsyncFiveArgOverload)
         QVariant(1), QVariant(2), QVariant(3), QVariant(4), QVariant(5),
         [&](QVariant v) { received = v; });
 
-    QCoreApplication::processEvents();
+    drainEvents();
     EXPECT_EQ(received.toInt(), 50);
     QVariantList last = m_mock->lastArgs("mod", "fn");
     ASSERT_EQ(last.size(), 5);
