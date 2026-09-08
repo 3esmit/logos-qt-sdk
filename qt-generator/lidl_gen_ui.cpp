@@ -34,11 +34,15 @@ bool lidlUiParseRepClass(const QString& repPath, QString* repClass, QString* why
         if (whyNot) *whyNot = "cannot read .rep file: " + repPath;
         return false;
     }
-    const QString text = QString::fromUtf8(f.readAll());
+    QString text = QString::fromUtf8(f.readAll());
     // Same extraction logos_module(REP_FILE ...) performs: the first class
     // declaration names the QtRO types (SimpleSource/Replica/ViewPluginBase).
+    // Strip both comment styles in one pass: a delimiter inside the other
+    // style is comment text, not the start/end of a separate comment.
+    text.replace(QRegularExpression(QStringLiteral(R"(//[^\r\n]*|/\*([^*]|\*+[^*/])*\*+/)")),
+                 QStringLiteral(" "));
     QRegularExpressionMatch m =
-        QRegularExpression(QStringLiteral("class[ \\t]+([A-Za-z_][A-Za-z0-9_]*)")).match(text);
+        QRegularExpression(QStringLiteral(R"((?:^|[\r\n])[ \t]*class[ \t]+([A-Za-z_][A-Za-z0-9_]*))")).match(text);
     if (!m.hasMatch()) {
         if (whyNot) *whyNot = "no `class <Name>` declaration found in " + repPath;
         return false;
