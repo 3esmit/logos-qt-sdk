@@ -1,5 +1,6 @@
 file(MAKE_DIRECTORY "${OUT_DIR}")
 file(WRITE "${OUT_DIR}/metadata.json" "{\"name\":\"probe\",\"version\":\"1.0.0\"}")
+string(ASCII 239 187 191 UTF8_BOM)
 set(CASES
     "class Actual\n{\n}\n"
     "// class Legacy\nclass Actual\n{\n}\n"
@@ -11,6 +12,8 @@ set(CASES
     "/* class Legacy */ class Actual\n{\n}\n"
     "#include \"class Legacy\"\n  class Actual\n{\n}\n"
     "class Actual\n{\n}\nclass Second\n{\n}\n"
+    "${UTF8_BOM}class Actual\n{\n}\n"
+    "${UTF8_BOM}/* class Legacy */ class Actual\n{\n}\n"
 )
 set(INDEX 0)
 foreach(CONTENTS IN LISTS CASES)
@@ -47,4 +50,4 @@ execute_process(COMMAND "${GENERATOR}" --backend ui
 if(RESULT EQUAL 0 OR NOT STDERR MATCHES "no `class <Name>` declaration found")
     message(FATAL_ERROR "Comments-only input was not rejected for its missing class: ${STDERR}")
 endif()
-message(STATUS "REP_CLASS_COMMENTS_OK: 10 byte-identical cases and missing-class rejection")
+message(STATUS "REP_CLASS_COMMENTS_OK: ${INDEX} byte-identical cases and missing-class rejection")
