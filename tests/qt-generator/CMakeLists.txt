@@ -23,6 +23,12 @@ set(_goldens  ${CMAKE_CURRENT_SOURCE_DIR}/goldens)
 set(_driver   ${CMAKE_CURRENT_SOURCE_DIR}/run_generator.cmake)
 set(_work     ${CMAKE_CURRENT_BINARY_DIR}/work)
 
+add_test(NAME qtgen.rep_class_comments
+  COMMAND ${CMAKE_COMMAND}
+    -DGENERATOR=${LOGOS_QT_GENERATOR}
+    -DOUT_DIR=${_work}/rep_class_comments
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/run_rep_comments.cmake)
+
 function(_qtgen_test name mode backend lidl)
   cmake_parse_arguments(A "" "GOLDEN_DIR;EXPECT_TEXT" "EXTRA_ARGS;REQUIRE_TEXT;FORBID_TEXT" ${ARGN})
   set(_cmd ${CMAKE_COMMAND}
