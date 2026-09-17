@@ -24,7 +24,8 @@ struct CoreStub {
     std::vector<std::string> known{"alpha", "beta"};
     std::vector<std::string> loaded{"alpha"};
     std::string statsJson =
-        R"([{"name":"alpha","cpu":7.25,"memory":8192,"extra":"kept","flag":true}])";
+        R"([{"name":"alpha","cpu_percent":7.25,"cpu_time_seconds":1.5,)"
+        R"("memory_mb":8192.0,"extra":"kept","flag":true}])";
     bool tokenPresent = true;
 };
 
@@ -67,7 +68,14 @@ char** logos_core_get_known_modules()  { return dupCArray(g->known); }
 char** logos_core_get_loaded_modules() { return dupCArray(g->loaded); }
 char** logos_core_get_module_dependencies(const char*, bool) { return dupCArray({"d1"}); }
 char** logos_core_get_module_dependents(const char*, bool)   { return dupCArray({}); }
-int  logos_core_load_module(const char*, bool)   { return 1; }
+int  g_lastLoadDeps = -1;
+int  logos_core_load_module(const char*, LogosLoadDeps d) { g_lastLoadDeps = static_cast<int>(d); return 1; }
+char* logos_core_optional_load_report(const char*) {
+    const char* s = R"([{"module":"extra","named_by":"alpha","reason":"not_installed"}])";
+    char* r = new char[std::strlen(s) + 1];
+    std::strcpy(r, s);
+    return r;
+}
 int  logos_core_unload_module(const char*, bool) { return 1; }
 char* logos_core_get_modules_info()          { return dupC("[]"); }
 char* logos_core_process_module(const char*) { return dupC("ok"); }
@@ -93,6 +101,14 @@ TEST_F(QtHostCoreTest, QStringArgumentsReachTheStdLayer)
 {
     QtLogosCore core(0, nullptr, LogosCore::Config{});
     EXPECT_TRUE(core.loadModule(QStringLiteral("alpha")));
+    EXPECT_EQ(g_lastLoadDeps, static_cast<int>(LOGOS_LOAD_REQUIRED_DEPS))
+        << "the Qt default must stay what `withDependencies = true` meant";
+
+    EXPECT_TRUE(core.loadModule(QStringLiteral("alpha"), LOGOS_LOAD_REQUIRED_AND_OPTIONAL));
+    EXPECT_EQ(g_lastLoadDeps, static_cast<int>(LOGOS_LOAD_REQUIRED_AND_OPTIONAL))
+        << "the new mode must reach the C API through both wrappers";
+
+    EXPECT_TRUE(core.optionalLoadReportJson(QStringLiteral("alpha")).contains("extra"));
     EXPECT_TRUE(core.unloadModule(QStringLiteral("alpha")));
 }
 
@@ -104,7 +120,7 @@ TEST_F(QtHostCoreTest, StatsCarryBothModelledAndUnmodelledFields)
     // Modelled, under the struct's spelling.
     EXPECT_EQ(m.value("name").toString(), QStringLiteral("alpha"));
     EXPECT_DOUBLE_EQ(m.value("cpuPercent").toDouble(), 7.25);
-    EXPECT_EQ(m.value("memoryBytes").toLongLong(), 8192);
+    EXPECT_DOUBLE_EQ(m.value("memoryMb").toDouble(), 8192.0);
 
     // Unmodelled keys survive, so a field added to liblogos' stats JSON is
     // readable without this header growing first.

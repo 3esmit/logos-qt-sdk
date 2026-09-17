@@ -8,6 +8,7 @@
 #include <functional>
 #include <utility>
 #include "logos_types.h"
+#include "logos_lp_client.h"
 #include "logos_api.h"
 #include "logos_api_client.h"
 #include "logos_call_error.h"
@@ -33,6 +34,17 @@ public:
     bool on(const QString& eventName, EventCallback callback);
     bool onMoved(std::function<void(const Point& from, const Point& to)> callback);
 
+    // Watch this module's subscription transitions: Armed / Lost /
+    // Held / Abandoned, with the establishment number. Lost followed by
+    // Armed at a higher generation is the unrecoverable-gap marker.
+    void onSubscriptionStatus(std::function<void(logos::SubStatus, std::uint64_t)> cb);
+    // 0 = never armed, 1 = the first, N+1 after each re-establishment.
+    std::uint64_t subscriptionGeneration();
+    // Manual means "do not RE-arm after a loss", never "do not arm".
+    void setRestartPolicy(logos::RestartPolicy policy);
+    // Revive held subscriptions. Safe from inside the status callback.
+    bool rearmSubscriptions();
+
     QString echo_text(const QString& s, logos::CallError* err = nullptr, Timeout timeout = Timeout());
     void echo_textAsync(const QString& s, std::function<void(QString)> callback, Timeout timeout = Timeout());
     void echo_textAsyncResult(const QString& s, std::function<void(logos::AsyncResult<QString>)> callback, Timeout timeout = Timeout());
@@ -54,9 +66,9 @@ public:
     QStringList echo_strings(const QStringList& v, logos::CallError* err = nullptr, Timeout timeout = Timeout());
     void echo_stringsAsync(const QStringList& v, std::function<void(QStringList)> callback, Timeout timeout = Timeout());
     void echo_stringsAsyncResult(const QStringList& v, std::function<void(logos::AsyncResult<QStringList>)> callback, Timeout timeout = Timeout());
-    QVariantList echo_ints(const QVariantList& v, logos::CallError* err = nullptr, Timeout timeout = Timeout());
-    void echo_intsAsync(const QVariantList& v, std::function<void(QVariantList)> callback, Timeout timeout = Timeout());
-    void echo_intsAsyncResult(const QVariantList& v, std::function<void(logos::AsyncResult<QVariantList>)> callback, Timeout timeout = Timeout());
+    QList<qlonglong> echo_ints(const QList<qlonglong>& v, logos::CallError* err = nullptr, Timeout timeout = Timeout());
+    void echo_intsAsync(const QList<qlonglong>& v, std::function<void(QList<qlonglong>)> callback, Timeout timeout = Timeout());
+    void echo_intsAsyncResult(const QList<qlonglong>& v, std::function<void(logos::AsyncResult<QList<qlonglong>>)> callback, Timeout timeout = Timeout());
     Point translate(const Point& p, double dx, logos::CallError* err = nullptr, Timeout timeout = Timeout());
     void translateAsync(const Point& p, double dx, std::function<void(Point)> callback, Timeout timeout = Timeout());
     void translateAsyncResult(const Point& p, double dx, std::function<void(logos::AsyncResult<Point>)> callback, Timeout timeout = Timeout());
@@ -75,6 +87,15 @@ public:
     void reset(logos::CallError* err = nullptr, Timeout timeout = Timeout());
     void resetAsync(std::function<void()> callback, Timeout timeout = Timeout());
     void resetAsyncResult(std::function<void(logos::AsyncResult<void>)> callback, Timeout timeout = Timeout());
+    QString name(logos::CallError* err = nullptr, Timeout timeout = Timeout());
+    void nameAsync(std::function<void(QString)> callback, Timeout timeout = Timeout());
+    void nameAsyncResult(std::function<void(logos::AsyncResult<QString>)> callback, Timeout timeout = Timeout());
+    QString version(logos::CallError* err = nullptr, Timeout timeout = Timeout());
+    void versionAsync(std::function<void(QString)> callback, Timeout timeout = Timeout());
+    void versionAsyncResult(std::function<void(logos::AsyncResult<QString>)> callback, Timeout timeout = Timeout());
+    QString lidl(logos::CallError* err = nullptr, Timeout timeout = Timeout());
+    void lidlAsync(std::function<void(QString)> callback, Timeout timeout = Timeout());
+    void lidlAsyncResult(std::function<void(logos::AsyncResult<QString>)> callback, Timeout timeout = Timeout());
 
 private:
     LogosAPI* m_api;
