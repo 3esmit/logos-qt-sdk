@@ -7,7 +7,7 @@
     # Keep protocol inputs on the maintained fork so downstream fork builds do
     # not silently switch back to the upstream repository.
     logos-protocol = {
-      url = "github:3esmit/logos-protocol?rev=cf2bda5fdb99f5487fe2dfc8bb0a1535b60e7829";
+      url = "github:3esmit/logos-protocol?rev=3f307064aea1a7a6747f0374b8216c0549d1aceb";
       inputs.logos-nix.follows = "logos-nix";
     };
     # The canonical, language-neutral LIDL frontend the qt-generator links.
@@ -28,8 +28,7 @@
     #
     # Pin the provider glue to the upstream commit carrying the inbound token
     # delivery fix. The three `follows` above keep one logos-protocol in the
-    # closure; this explicit pin keeps the provider/consumer behavior reproducible
-    # while the maintained fork catches up with upstream.
+    # closure; this explicit pin keeps the provider/consumer behavior reproducible.
     logos-plugin-qt = {
       url = "github:logos-co/logos-plugin-qt/3a471be14af66d099827ee712ec8c40ead701340";
       inputs.logos-nix.follows = "logos-nix";
