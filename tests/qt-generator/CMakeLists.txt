@@ -7,11 +7,11 @@
 #     means a change leaked into a path that was supposed to be untouched.
 #     The goldens are a review artifact, not a snapshot to refresh on red.
 #
-#  2. The optional paths generate, and an optional RETURN is refused with its
-#     reason on every backend that could otherwise emit one. Since `--backend
-#     qt` was retired, `consumer` is the only such backend: it is the only one
-#     that can emit a CALLER for a method whose empty answer would be
-#     indistinguishable from a failed call.
+#  2. The optional paths generate — INCLUDING an optional RETURN, which this
+#     backend refused until the type mapping became lossless. `?T` is
+#     std::optional<T> now, and failure travels on the CallError channel rather
+#     than in the value, so "found nothing" and "the call failed" are no longer
+#     one answer. See `optional_return_consumer` below for what is asserted.
 #
 # These drive the installed generator binary rather than linking its internals,
 # because the binary is what module-builder actually invokes.
@@ -22,12 +22,6 @@ set(_fixtures ${CMAKE_CURRENT_SOURCE_DIR}/fixtures)
 set(_goldens  ${CMAKE_CURRENT_SOURCE_DIR}/goldens)
 set(_driver   ${CMAKE_CURRENT_SOURCE_DIR}/run_generator.cmake)
 set(_work     ${CMAKE_CURRENT_BINARY_DIR}/work)
-
-add_test(NAME qtgen.rep_class_comments
-  COMMAND ${CMAKE_COMMAND}
-    -DGENERATOR=${LOGOS_QT_GENERATOR}
-    -DOUT_DIR=${_work}/rep_class_comments
-    -P ${CMAKE_CURRENT_SOURCE_DIR}/run_rep_comments.cmake)
 
 function(_qtgen_test name mode backend lidl)
   cmake_parse_arguments(A "" "GOLDEN_DIR;EXPECT_TEXT" "EXTRA_ARGS;REQUIRE_TEXT;FORBID_TEXT" ${ARGN})
@@ -69,11 +63,27 @@ _qtgen_test(plain_consumer golden consumer plain_module.lidl GOLDEN_DIR plain_co
 # --- 2. the optional paths generate at all -----------------------------------
 _qtgen_test(optional_consumer generate consumer optional_module.lidl)
 
-# --- 3. an optional RETURN is refused, with its reason ------------------------
-# Asserting the REASON, not just the failure: a bare non-zero exit would also be
-# satisfied by an unrelated parse error, which would quietly retire the tripwire.
-_qtgen_test(refuse_return_consumer refuse consumer refuses_optional_return.lidl
-            EXPECT_TEXT "optional RETURN")
+# --- 3. an optional RETURN generates, and keeps its value type ----------------
+#
+# This case was a REFUSAL until the Qt type mapping became lossless. The reason
+# for the refusal was that an empty `?T` is JSON null on the wire and null was
+# also how a failed call reported itself, so the two were indistinguishable.
+#
+# What is asserted now is not "it generates" — that alone would also be
+# satisfied by a wrapper that returns a bare QVariant and re-creates the
+# ambiguity. It is the two properties that make generating safe:
+#
+#   1. the RETURN keeps its value type, so the empty answer (std::nullopt) is
+#      distinct from a present empty string;
+#   2. the body still reads failure from the ERROR channel — `logos::CallError`,
+#      filled from the C ABI's return code — and decides nothing from whether
+#      the result is null. `logos::qt::invoke` is what enforces that; a body
+#      that started branching on `_r.is_null()` would be the regression.
+_qtgen_test(optional_return_consumer generate consumer refuses_optional_return.lidl
+            REQUIRE_TEXT "std::optional<QString> lookup(const QString& id"
+                         "if (__s.is_null()) return std::optional<QString>()"
+                         "logos::qt::invoke(m_bridge, \"lookup\", _args, &_err"
+            FORBID_TEXT "_r.is_null()")
 
 # --- 3b. the LogosAPI-FREE consumer binding (--binding origin) ----------------
 #
@@ -125,6 +135,38 @@ _qtgen_test(bound_origin_consumer_takes_origin_and_target generate consumer plai
 _qtgen_test(refuse_unknown_binding refuse consumer plain_module.lidl
             EXTRA_ARGS --binding orgin
             EXPECT_TEXT "Unknown --binding")
+
+# --- 3c. the provider-rejection detector matches a CLOSED SET of codes --------
+#
+# The emitted detector folds a provider REFUSAL into logos::CallError instead of
+# letting the return decode erase it into a default. It matched the single
+# literal "dispatch_failed" until providers were found to be emitting
+# "invalid_args" for an arity error with nobody detecting it — measured as
+# `logosctl call test_basic_module isPositive` (argument missing) exiting 0 with
+# status "ok" and the refusal object as its result.
+#
+# Named REQUIRE/FORBID rather than left to the golden: the golden says "this
+# exact text" and gets refreshed as a unit, and the property that matters here
+# is that all three codes are present and the OLD single-literal compare is
+# gone. `unknown_method` is asserted even though no provider emits it — that
+# readiness is the reason the detectors were widened before the providers.
+_qtgen_test(consumer_rejection_detector_matches_closed_code_set
+            generate consumer plain_module.lidl
+            REQUIRE_TEXT "_code != \"dispatch_failed\""
+                         "_code != \"invalid_args\""
+                         "_code != \"unknown_method\""
+            FORBID_TEXT "code->get<std::string>() != \"dispatch_failed\"")
+
+# The NEGATIVE half, stated as absences a golden refresh cannot quietly restore.
+# Widening one literal into a set is one edit away from an OPEN match on any
+# {code, message, origin} object, which would hand every method that legitimately
+# returns a three-string map to the error channel. The three shape guards are
+# what keep it closed, so require them by name.
+_qtgen_test(consumer_rejection_detector_stays_narrow
+            generate consumer plain_module.lidl
+            REQUIRE_TEXT "if (!v.is_object() || v.size() != 3) return false;"
+                         "if (!code->is_string() || !message->is_string() || !origin->is_string()) return false;"
+                         "if (code == v.end() || message == v.end() || origin == v.end()) return false;")
 
 # --- 4. two consumer wrappers COMPILE in one translation unit -----------------
 #
@@ -217,3 +259,225 @@ target_link_libraries(qtgen_origin_umbrella_tu PRIVATE
     logos_qt_sdk
     Qt${QT_VERSION_MAJOR}::Core
 )
+
+# --- 6. the widened types round-trip REAL VALUES through the emitted code -----
+#
+# Everything above reads the generator's TEXT or hands it to a compiler. Neither
+# catches the failure this backend's type mapping actually has, because it is
+# not a compile error and not a diff: `QVariant::fromValue(QList<qulonglong>)`
+# compiles, produces a QVariant, and serialises to JSON **null** — logos-
+# protocol's qvariantToNlohmann matches a CLOSED userType() set that
+# QList<qulonglong> is not in. The other direction is just as quiet:
+# qvariant_cast back from a QVariantList yields an EMPTY list. A wrapper built
+# that way passes every assertion in this file and loses the payload of every
+# typed call.
+#
+# So this one EXECUTES the generated code. `roundtrip_tu.cpp` #includes the
+# generated .cpp (the umbrella_tu trick, which is what makes the file-local
+# record codecs reachable) and pushes boundary values through them: 2^64-1,
+# bytes with an embedded NUL and a high byte, empty vs present optionals,
+# nested containers, and the mistyped elements that must be refused rather than
+# coerced.
+#
+# It LINKS, unlike the two compile-only targets above — the generated method
+# bodies call the bridge, so this also proves the widened wrappers resolve.
+set(_rt_dir ${CMAKE_CURRENT_BINARY_DIR}/roundtrip_tu)
+set(_rt_generated ${_rt_dir}/widened_module_api.cpp ${_rt_dir}/widened_module_api.h)
+
+add_custom_command(
+    OUTPUT ${_rt_generated}
+    COMMAND ${LOGOS_QT_GENERATOR} --lidl ${_fixtures}/widened_module.lidl
+            --backend consumer --module widened_module --output-dir ${_rt_dir}
+    DEPENDS ${_fixtures}/widened_module.lidl
+    COMMENT "Generating the widened-types consumer wrapper for the round-trip test"
+)
+add_custom_target(qtgen_roundtrip_sources DEPENDS ${_rt_generated})
+
+# --- 6b. the NESTING axis: every two-container combination COMPILES ----------
+#
+# The fixture above has one slot per ROW of the widened type table. This one has
+# one slot per two-container COMBINATION, and it exists because that axis had
+# shapes no fixture had ever generated — and their failure mode is not a wrong
+# value but text a compiler REFUSES:
+#
+#   {tstr: {tstr: Point}}  ->  `for (auto __i = __i.value().cbegin(); ...)`
+#                              `__i` used inside its own initialiser
+#   ?{tstr: Point}         ->  `*__c.cbegin()`, i.e. `*(__c.cbegin())`,
+#                              a std::optional asked for an iterator
+#
+# So the assertion here is the BUILD. A separate translation unit rather than
+# more slots in widened_module.lidl: each TU `#include`s exactly one generated
+# .cpp, and two contracts that both declare a `Point` would collide in one.
+set(_nested_dir ${CMAKE_CURRENT_BINARY_DIR}/nested_tu)
+set(_nested_generated ${_nested_dir}/nested_module_api.cpp ${_nested_dir}/nested_module_api.h)
+
+add_custom_command(
+    OUTPUT ${_nested_generated}
+    COMMAND ${LOGOS_QT_GENERATOR} --lidl ${_fixtures}/nested_module.lidl
+            --backend consumer --module nested_module --output-dir ${_nested_dir}
+    DEPENDS ${_fixtures}/nested_module.lidl
+    COMMENT "Generating the nested-shapes consumer wrapper for the compile + round-trip test"
+)
+add_custom_target(qtgen_nested_sources DEPENDS ${_nested_generated})
+
+add_executable(qtgen_roundtrip_tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/roundtrip_tu.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/nested_tu.cpp)
+add_dependencies(qtgen_roundtrip_tests qtgen_roundtrip_sources qtgen_nested_sources)
+target_include_directories(qtgen_roundtrip_tests PRIVATE ${_rt_dir} ${_nested_dir})
+target_link_libraries(qtgen_roundtrip_tests PRIVATE
+    logos_qt_sdk
+    GTest::gtest
+    GTest::gtest_main
+    Qt${QT_VERSION_MAJOR}::Core
+)
+gtest_discover_tests(qtgen_roundtrip_tests)
+
+# --- 7. the nested shapes, and the decode ERROR CHANNEL, as TEXT -------------
+#
+# The compile target above is the real assertion for D2 and the runtime tests
+# are the real assertion for the error channel. These name the individual
+# properties, so a regression fails with its own sentence instead of as a
+# compile error 400 columns wide or a golden diff.
+#
+# The FORBID list is the more important half, and each entry was MEASURED: the
+# generator at the commit before this one emits every one of them for this exact
+# fixture (counts in parentheses), and emits none of them after.
+#
+#   for (auto __i = __i         (1)  `{tstr: {tstr: Rec}}` — the map iterator
+#                                    initialised from ITSELF
+#   for (auto __i = *           (1)  `?{tstr: Rec}` — `*x.cbegin()`, which parses
+#                                    as `*(x.cbegin())` and asks a std::optional
+#                                    for an iterator
+#   for (const auto& __e : __e) (4)  the list twin: a range-for over the name the
+#                                    loop itself declares
+#   const nlohmann::json& __src (20) a decode source bound to a LOCAL instead of
+#                                    passed as a lambda argument — the ROOT of
+#                                    all three, and the one that catches the
+#                                    mistake before it picks a spelling
+#   if (!__s.is_array()         (23) the shape check that answered an empty
+#   if (!__s.is_object()        (22) container and told no one
+#
+# The REQUIRE entries beside them are the positive: after the fix there is
+# exactly ONE spelling of each loop, and its source is always the parameter.
+_qtgen_test(nested_shapes_emit generate consumer nested_module.lidl
+            REQUIRE_TEXT "for (auto __i = __c.cbegin()"
+                         "for (const auto& __e : __c)"
+                         "logos::qt::tryRequireArray(__s, &__why)"
+                         "logos::qt::tryRequireObject(__s, &__why)"
+                         "logos::qt::noteDecodeError(__derr,"
+                         "recFromWire_NestedModule_Point(const nlohmann::json& w, std::string* __derr)"
+            FORBID_TEXT "for (auto __i = __i"
+                        "for (auto __i = *"
+                        "for (const auto& __e : __e)"
+                        "const nlohmann::json& __src"
+                        "if (!__s.is_array()"
+                        "if (!__s.is_object()"
+                        "if (!w.is_object()")
+
+# --- 7b. the three slots the ELEMENT rule did not reach ----------------------
+#
+# The runtime assertions for these live in roundtrip_tu.cpp, on the record
+# codec. What no test can execute is the METHOD-RETURN slot — a generated body
+# calls the bridge and there is no bridge here — so the property is pinned as
+# text, on the fixture that has one of each: `echo_strings` returns `[tstr]`,
+# `attributes` returns `{tstr: any}`.
+#
+# Both are CONTAINERS whose Qt spelling crosses the QVariant boundary whole
+# (QStringList / QVariantMap are in qvariantToNlohmann's closed userType() set),
+# which is why they never got an element loop. That is an ENCODE property, and
+# using it to decide DECODE strictness left `["a", 5, true, {}]` arriving from a
+# `[tstr]` as four strings while the std codec rejected it — and left `[tstr]`
+# STRICTER as an element (`?[tstr]`, `[[tstr]]`) than as a slot.
+#
+# The FORBID entry is the measured one: at the commit before this, the emitter
+# produced `fromWire<QStringList>` for that return, and now produces none.
+_qtgen_test(whole_crossing_containers_are_checked generate consumer plain_module.lidl
+            REQUIRE_TEXT "logos::qt::tryFromWire(__s, __acc, &__why)"
+                         "rejected a `[tstr]` value"
+                         "rejected a `{tstr: any}` value"
+                         "recFromWire_PlainModule_Point(const nlohmann::json& w, std::string* __derr)"
+                         "logos::qt::tryRequireObject(w, &__why)"
+                         "rejected a `float64` field `x`"
+            FORBID_TEXT "fromWire<QStringList>"
+                        "fromWire<QVariantMap>"
+                        "if (!w.is_object()")
+
+# The other half of the same line, and the reason the test above is not simply
+# "everything is checked now": a bare SCALAR slot is still decoded by the
+# lenient `logos::qt::fromWire<T>`, on purpose.
+#
+# That leniency is the shipped contract of BOTH consumer surfaces — logos_qt_wire.h
+# documents it here, and logos-cpp-sdk's lp emitter (lpFromJsonExpr)
+# independently answers 0 / "" / false for the same mismatch — so tightening it
+# is a decision about every scalar return of every module, taken together with
+# that emitter or the two diverge. Asserted so that moving the line means
+# deleting a test that says not to, rather than noticing a golden moved.
+# roundtrip_tu.cpp's ABareScalarSlotIsLenientOnPurpose is the runtime twin.
+#
+# LogosResult IS NO LONGER ON THIS LIST, and that is the one deliberate
+# exception rather than the line moving. The others bottom out at a value no
+# provider means as an answer -- "" for a string, 0 for a number. LogosResult's
+# default is `success = false` with no error, which is precisely what a provider
+# sends when it REFUSES a call, so leniency there did not produce a harmless
+# placeholder: it produced a forged rejection, returned for every input
+# including the well-formed ones. `logosResultFromReply` replaces the lenient
+# whole-value decode on that one type.
+#
+# The warning this comment used to carry -- tighten it "taken together with that
+# emitter or the two diverge" -- was heeded, not overridden: logos-cpp-sdk's lp
+# surface has the identical function (logos::jsonToStdResult, same opening
+# `if (!is_object)`) and it is tightened in the same way, in the same change.
+# The bare scalars stay lenient on BOTH surfaces.
+_qtgen_test(bare_scalar_slots_stay_lenient generate consumer plain_module.lidl
+            REQUIRE_TEXT "logos::qt::fromWire<QString>(_r)"
+                         "logos::qt::fromWire<qulonglong>(_r)"
+                         "logos::qt::fromWire<QVariant>(_r)"
+            FORBID_TEXT "logos::qt::fromWire<LogosResult>(_r)")
+
+# The LogosResult exception itself, pinned so it cannot quietly revert to the
+# lenient decode: a reply that is not an object must report what it got, and a
+# transport failure must report its own message, on all three surfaces.
+_qtgen_test(a_result_reply_that_cannot_be_read_says_so generate consumer plain_module.lidl
+            REQUIRE_TEXT "void logosResultFromReply(const nlohmann::json& r, const logos::CallError& err,"
+                         "expected a result object, got "
+                         "logosResultFromReply(_r, _err, m_moduleName.toStdString(), _out)"
+                         "logosResultFromReply(_r, _res.error, _target, _res.value)")
+
+# The METHOD-level half of the error channel, which no test can execute: a
+# generated body calls the bridge, and there is no bridge here. So it is pinned
+# as text — the decode into a NAMED local (it cannot be folded before the decode
+# has walked the value), the fold on the sync surface, and the fold on the
+# result-carrying async surface with the target name CAPTURED rather than read
+# off `this` after the call returned.
+#
+# `std::string* __derr = nullptr` is the third surface: the value-only async
+# callback and event delivery have nowhere to put an error, so they pass a null
+# sink and the qWarning stays their only report.
+_qtgen_test(decode_failure_reaches_the_caller generate consumer nested_module.lidl
+            REQUIRE_TEXT "if (err) logosNoteDecodeFailure(_derr, m_moduleName.toStdString(), *err)"
+                         "[callback, _target = m_moduleName.toStdString()]"
+                         "logosNoteDecodeFailure(_derr, _target, _res.error)"
+                         "std::string* __derr = nullptr")
+
+# --- 4. --backend ui: RETIRED, and refused loudly ----------------------------
+#
+# The ui emitter lives in logos-view-module now (logos-view-generator), beside
+# the LogosView*.in templates its output is compiled against and beside
+# logos_ui_plugin_context.h, which its output calls into.
+#
+# What this pins is the REFUSAL, and it is worth a test because the alternative
+# to refusing is what caused the problem in the first place. This repo and
+# logos-view-module both carried the emitter; this copy gained the module
+# teardown hook and the other did not, and nothing noticed -- a generated view
+# plugin missing the hook builds, loads and runs, it just silently never gets
+# asked to finish. So `--backend ui` must not quietly become "unknown backend"
+# either: the message has to NAME the binary that took the work over, or the
+# next caller to land here (a logos-module-builder predating the repoint) gets
+# a generic parse error instead of the one sentence that resolves it.
+add_test(NAME qtgen.ui_backend_retired COMMAND ${CMAKE_COMMAND}
+    -DCMD=${LOGOS_QT_GENERATOR}
+    "-DARGS=--backend;ui;--metadata;x.json;--rep;x.rep"
+    -DEXPECT_FAIL=1
+    "-DREQUIRE_STDERR=--backend ui was removed|logos-view-generator"
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/run_expect_refusal.cmake)

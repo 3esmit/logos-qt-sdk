@@ -7,12 +7,12 @@
     # Keep protocol inputs on the maintained fork so downstream fork builds do
     # not silently switch back to the upstream repository.
     logos-protocol = {
-      url = "github:3esmit/logos-protocol?rev=f090940772eb74f6cfac0febdecd521f05a264c7";
+      url = "github:3esmit/logos-protocol?rev=cf2bda5fdb99f5487fe2dfc8bb0a1535b60e7829";
       inputs.logos-nix.follows = "logos-nix";
     };
     # The canonical, language-neutral LIDL frontend the qt-generator links.
     logos-lidl = {
-      url = "github:logos-co/logos-lidl";
+      url = "github:logos-co/logos-lidl/2043d8bf94c6bfee3781f96ad088e8c13ec36038";
       inputs.logos-nix.follows = "logos-nix";
     };
     # Where the Qt host runtime lives now: logos-plugin-qt's `logos-qt-host`
@@ -26,12 +26,12 @@
     # there — the exact split-brain the Windows single-provider work spent
     # itself closing, reintroduced through the lock file instead of the linker.
     #
-    # Unpinned again: feat/b4-qt-host-windows-target merged (logos-plugin-qt#19),
-    # so `logos-qt-host` is on that repo's master and an unpinned input resolves
-    # it. The three `follows` above stay — they are what keeps one logos-protocol
-    # in the closure, and that is independent of pinning.
+    # Pin the provider glue to the upstream commit carrying the inbound token
+    # delivery fix. The three `follows` above keep one logos-protocol in the
+    # closure; this explicit pin keeps the provider/consumer behavior reproducible
+    # while the maintained fork catches up with upstream.
     logos-plugin-qt = {
-      url = "github:logos-co/logos-plugin-qt";
+      url = "github:logos-co/logos-plugin-qt/3a471be14af66d099827ee712ec8c40ead701340";
       inputs.logos-nix.follows = "logos-nix";
       inputs.logos-protocol.follows = "logos-protocol";
       inputs.logos-lidl.follows = "logos-lidl";
@@ -47,7 +47,7 @@
     # `interface: "provider"` authoring path behind it, were removed.
     # Keep the C++ SDK input on the maintained fork as well.
     logos-cpp-sdk = {
-      url = "github:3esmit/logos-cpp-sdk?rev=cbcc4f73e13ccc022942323f729dc7b32d4c2839";
+      url = "github:3esmit/logos-cpp-sdk?rev=a4b7550470b0ad874bb7c20ed95df8e5a7bdd8c8";
       inputs.logos-nix.follows = "logos-nix";
       inputs.logos-protocol.follows = "logos-protocol";
       inputs.logos-lidl.follows = "logos-lidl";
@@ -57,9 +57,19 @@
   outputs = { self, nixpkgs, logos-nix, logos-protocol, logos-lidl, logos-cpp-sdk, logos-plugin-qt }:
     let
       systems = [ "aarch64-darwin" "x86_64-darwin" "aarch64-linux" "x86_64-linux" ];
+
+      # logos-nix's crates.io fixes. Without them this flake builds a SECOND,
+      # un-overlaid Qt, so a module closure ends up carrying two qtdeclaratives
+      # and still fetching crate sources from the endpoint crates.io 403s.
+      # Windows takes mkWindowsPkgs, which owns its own overlay list.
+      mkPkgs = system: import nixpkgs {
+        inherit system;
+        overlays = logos-nix.lib.nativeOverlays;
+      };
+
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f {
         inherit system;
-        pkgs = import nixpkgs { inherit system; };
+        pkgs = mkPkgs system;
         protocolLib = logos-protocol.packages.${system}.logos-protocol-lib;
         cppGenerator = logos-cpp-sdk.packages.${system}.cpp-generator;
         # Headers only — the base SDK's include set, needed by the test suite's
@@ -85,7 +95,7 @@
             isWin = system == "x86_64-windows";
             pkgs =
               if isWin then logos-nix.lib.mkWindowsPkgs { buildSystem = windowsBuildSystem; }
-              else import nixpkgs { inherit system; };
+              else mkPkgs system;
             protocolLib = logos-protocol.packages.${system}.logos-protocol-lib;
           in
           f {

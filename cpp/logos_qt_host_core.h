@@ -78,8 +78,11 @@ inline QVariantMap toQVariantMap(const host::ModuleStats& s)
     QVariantMap m;
     // The modelled fields, named as the struct names them.
     m.insert(QStringLiteral("name"),        QString::fromStdString(s.name));
-    m.insert(QStringLiteral("cpuPercent"),  s.cpuPercent);
-    m.insert(QStringLiteral("memoryBytes"), static_cast<qlonglong>(s.memoryBytes));
+    m.insert(QStringLiteral("cpuPercent"),     s.cpuPercent);
+    m.insert(QStringLiteral("cpuTimeSeconds"), s.cpuTimeSeconds);
+    // MEGABYTES. This was `memoryBytes` as a qlonglong, mirroring a struct
+    // member that both misnamed the unit and read a JSON key nothing emits.
+    m.insert(QStringLiteral("memoryMb"),       s.memoryMb);
     // Plus every raw key, so a consumer sees fields added to liblogos' stats
     // JSON without waiting for this header to grow them. Modelled keys above
     // win on collision, since they are the documented spelling.
@@ -124,9 +127,24 @@ public:
     void start()          { m_core.start(); }
     bool isStarted() const { return m_core.isStarted(); }
 
-    bool loadModule(const QString& name, bool withDependencies = true)
+    // `deps` is logos-cpp-sdk's LogosLoadDeps, forwarded rather than mirrored:
+    // this file includes that header, so there is one definition and a stale
+    // copy here is not possible. The default is the required tree, which is
+    // what `withDependencies = true` meant before the parameter became an enum.
+    bool loadModule(const QString& name,
+                    LogosLoadDeps deps = LOGOS_LOAD_REQUIRED_DEPS)
     {
-        return m_core.loadModule(name.toStdString(), withDependencies);
+        return m_core.loadModule(name.toStdString(), deps);
+    }
+
+    // Which optional dependencies LOGOS_LOAD_REQUIRED_AND_OPTIONAL would leave
+    // out for `name`, and why, as liblogos' JSON. A null QString when the core
+    // answered nothing. Worth asking after such a load: a skipped module keeps
+    // whatever state it had, so nothing else separates it from one nobody wanted.
+    QString optionalLoadReportJson(const QString& name) const
+    {
+        const auto report = m_core.optionalLoadReportJson(name.toStdString());
+        return report ? QString::fromStdString(*report) : QString();
     }
 
     bool unloadModule(const QString& name, bool withDependents = false)
